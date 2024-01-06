@@ -11,20 +11,7 @@ show_help() {
 }
 
 write_to_device() {
-    local device="${1}"
-    local image="${2}"
-    dd if="${image}" of="${device}" bs=10240
-}
-
-mount_partition() {
-    local device="$1"
-    local mntpoint="$2"
-    mount "$device" "$mntpoint"
-}
-
-umount_partition() {
-    local device="$1"
-    umount "$device"
+    dd if="${IMAGE}" of="${DEVICE}" bs=10240
 }
 
 enable_ssh_on_boot() {
@@ -34,28 +21,52 @@ enable_ssh_on_boot() {
 
 set_hostname() {
     local mntpoint="$1"
-    echo "${HOSTN}" > "${mntpoint}/etc/hostname"
+    if [ -z "${PIHOSTNAME}" ]; then
+        echo "No hostname for RPi defined. Leaving default."
+        return
+    fi
+    echo "${PIHOSTNAME}" > "${mntpoint}/etc/hostname"
     # default hostname for raspbian is raspberrypi
-    sed -ie "s/raspberrypi/${HOSTN}/" "${mntpoint}/etc/hosts"
+    sed -ie "s/raspberrypi/${PIHOSTNAME}/" "${mntpoint}/etc/hosts"
+    echo "Hostname for RPi chaned to '${PIHOSTNAME}'."
 }
 
 setup_net() {
     local mntpoint="$1"
-    {
-        echo
-        echo "interface eth0"
-        echo "static ip_address=$IP/$NETMASK"
-        echo "static routers=${GATEWAY}"
-        echo "static domain_name_servers=$NAMESERVERS"
-        echo "metric 200"
-        echo
-        echo "interface wlan0"
-        echo "static ip_address=$IP/$NETMASK"
-        echo "static routers=${GATEWAY}"
-        echo "static domain_name_servers=$NAMESERVERS"
-        echo "metric 300"
-    } >> "${mntpoint}/etc/dhcpcd.conf"
+    if [ -z "${IP}" ] || [ -z "${GATEWAY}" ] || [ -z "${NETMASK}" ] || \
+        [ -z "${NAMESERVERS}" ]; then
+        echo -n "One (or more) variable is missing for configuring static "
+        echo "network. Check variables:"
+        echo IP
+        echo NETMASK
+        echo GATEWAY
+        echo NAMESERVERS
+        echo "in params file. Skipping."
+    else
+        {
+            echo
+            echo "interface eth0"
+            echo "static ip_address=$IP/$NETMASK"
+            echo "static routers=${GATEWAY}"
+            echo "static domain_name_servers=$NAMESERVERS"
+            echo "metric 200"
+            echo
+            echo "interface wlan0"
+            echo "static ip_address=$IP/$NETMASK"
+            echo "static routers=${GATEWAY}"
+            echo "static domain_name_servers=$NAMESERVERS"
+            echo "metric 300"
+        } >> "${mntpoint}/etc/dhcpcd.conf"
+    fi
 
+    if [ -z "${COUNTRY}" ] || [ -z "${SSID}" ] || [ -z "${WIFIPSK}" ]; then
+        echo -n "One (or more) variable is missing for configuring WIFI "
+        echo "access. Check variables:"
+        echo COUNTRY
+        echo SSID
+        echo WIFIPSK
+        return
+    fi
     {
         echo "ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev"
         echo "update_config=1"
@@ -167,13 +178,13 @@ fi
 
 source ./params
 
-write_to_device "${DEVICE}" "${IMAGE}"
+write_to_device
 
 boot_mnt=$(mktemp -d pixie.XXX)
 fs_mnt=$(mktemp -d pixie.XXX)
 
-mount_partition "${DEVICE}1" "${boot_mnt}"
-mount_partition "${DEVICE}2" "${fs_mnt}"
+mount "${DEVICE}1" "${boot_mnt}"
+mount "${DEVICE}2" "${fs_mnt}"
 
 enable_ssh_on_boot "${boot_mnt}"
 set_hostname "${fs_mnt}"
@@ -185,8 +196,8 @@ clear_soft_rfkill "${fs_mnt}"
 remove_pi_pass "${fs_mnt}"
 copy_pi_files "${fs_mnt}/home/pi"
 
-umount_partition "${boot_mnt}"
-umount_partition "${fs_mnt}"
+umount "${boot_mnt}"
+umount "${fs_mnt}"
 
 rm -fr "${boot_mnt}"
 rm -fr "${fs_mnt}"
