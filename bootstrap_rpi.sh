@@ -96,7 +96,7 @@ copy_authorized_key() {
 
     if [[ -f "${SSHKEY}" ]]; then
         # if SSHKEY contain filename pointing to the ssh key, use it
-        cat "${SSHKEY}" >> "${mntpoint}/home/pi/.ssh/authorized_keys" 
+        cat "${SSHKEY}" >> "${mntpoint}/home/pi/.ssh/authorized_keys"
     else
         # or treat it as string containing the key.
         echo "${SSHKEY}" >> "${mntpoint}/home/pi/.ssh/authorized_keys"
@@ -171,11 +171,18 @@ copy_pi_files() {
 }
 
 disable_interactive_setup() {
-    # just replace ExecStart with cancel-rename, which will stop renaming 
+    # just replace ExecStart with cancel-rename, which will stop renaming
     # process for user pi and will enable getty.
     local mntpoint="$1"
     sed -ie 's~ExecStart=.*~ExecStart=/usr/bin/cancel-rename~g' \
         "$mntpoint/lib/systemd/system/userconfig.service"
+}
+
+disable_regenerating_sshd_keys() {
+    # remove regenerate_ssh_host_keys from main in usr/lib/raspberrypi-sys-mods/firstboot
+    local mntpoint="$1"
+    sed -ie 's/  regenerate_ssh_host_keys$//g' \
+        "$mntpoint/usr/lib/raspberrypi-sys-mods/firstboot"
 }
 
 if [ $# -ne 2 ]; then
@@ -203,6 +210,9 @@ mount "${DEVICE}1" "${boot_mnt}"
 mount "${DEVICE}2" "${fs_mnt}"
 
 disable_interactive_setup "${fs_mnt}"
+if [[ -f sshd_keys ]]; then
+    disable_regenerating_sshd_keys "${fs_mnt}"
+fi
 enable_ssh_on_boot "${boot_mnt}"
 set_hostname "${fs_mnt}"
 setup_net "${fs_mnt}"
