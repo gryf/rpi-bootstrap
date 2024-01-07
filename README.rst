@@ -6,7 +6,7 @@ This repository contains simple bootstrap script, which will prepare sdcard/usb
 drive, so that Raspberry Pi can be first-boot in completely headless manners.
 This script will:
 
-- write `Raspberry Pi OS`_ Bullseye (preferably Lite version) on selected device
+- write `Raspberry Pi OS`_ Bookworm (preferably Lite version) on selected device
 - configure network (both - wifi and ethernet) with static address
 - remove soft rfkill for wifi and bt, so it will be active during
 - enable ssh
@@ -33,7 +33,6 @@ Usage
 Before you start, you need to prepare `params` shell file, which would contain
 all, or some of the variables:
 
-- ``COUNTRY`` - needed for wifi configuration. *UK* by default.
 - ``DEFAULTLOCALE`` - locale for the system, default is *en_UK.utf-8*.
 - ``PIHOSTNAME`` - hostname for the OS. Default is 'raspberrypi'.
 - ``KBDLAYOUT`` - keyboard layout for the console. Default *gb*.
@@ -42,7 +41,8 @@ all, or some of the variables:
 - ``WIFIPSK`` - wifi password. Leave it if you don't want to configure wifi.
 - ``GATEWAY`` - IP address for gateway. Leave it if you like to use DHCP.
 - ``IP`` - IP address for RPi. Leave it if you like to use DHCP.
-- ``NAMESERVERS`` - DNS servers for RPi. Leave it if you like to use DHCP.
+- ``NAMESERVERS`` - space separated DNS servers for RPi. Leave it if you like
+  to use DHCP.
 - ``NETMASK`` - network netmask for RPi. Leave it if you like to use DHCP.
 
 Note, that same IP address will be used for both ``eth0`` and ``wlan0``
@@ -76,7 +76,7 @@ Raspberry Pi OS, that would be:
 
 .. code:: shell-session
 
-   $ sudo ./bootstrap_rpi.sh /dev/sdk ~/Downloads/2022-09-22-raspios-bullseye-arm64-lite.img
+   $ sudo ./bootstrap_rpi.sh /dev/sdk ~/Downloads/2023-12-11-raspios-bookworm-arm64-lite.img
 
 When it finishes, move the device (sdcard, usb thumb drive or disk drive
 connected by the usb interface) to the Raspberry Pi and boot it up. Now you'll
