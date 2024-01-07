@@ -105,11 +105,11 @@ copy_authorized_key() {
 
 copy_sshd_keys() {
     local mntpoint="$1"
-    if [ ! -d "ssh_keys" ]; then
+    if [ ! -d "sshd_keys" ]; then
         echo "No sshd keys found, skipping"
         return
     fi
-    for fname in ssh_keys/*; do
+    for fname in sshd_keys/*; do
         cp "${fname}" "$mntpoint/etc/ssh"
     done
     chmod 600 $mntpoint/etc/ssh/*key

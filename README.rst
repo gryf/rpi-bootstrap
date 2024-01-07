@@ -57,6 +57,13 @@ Optionally, you can make a ``pi`` directory in current directory, which all the
 contents would be copy to the ``/home/pi`` directory, so you'll find those
 after RPi boots up.
 
+SSHD keys
+.........
+
+If you want to preserve SSH server keys, you can do that by copying them to the
+``sshd_keys`` directory. It will be copied if found, otherwise keys will be
+generated again next time you master the image.
+
 Now, you can invoke the command:
 
 .. code:: shell-session
