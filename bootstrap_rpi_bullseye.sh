@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 
-# Write raspbian image provided via commandline to the passed device, and do
-# the basic boostrap - configure network, add ssh key and so on.
+# Write raspios image based on Bullseye (Debian 11) provided via commandline
+# to the passed device, and do the basic boostrap - configure network, add
+# ssh key and so on.
 
 set -ex
 
@@ -92,7 +93,14 @@ copy_authorized_key() {
         chmod 600 "${mntpoint}/home/pi/.ssh/authorized_keys"
         chown 1000:1000 "${mntpoint}/home/pi/.ssh/authorized_keys"
     fi
-    echo "${SSHKEY}" >> "${mntpoint}/home/pi/.ssh/authorized_keys"
+
+    if [[ -f "${SSHKEY}" ]]; then
+        # if SSHKEY contain filename pointing to the ssh key, use it
+        cat "${SSHKEY}" >> "${mntpoint}/home/pi/.ssh/authorized_keys" 
+    else
+        # or treat it as string containing the key.
+        echo "${SSHKEY}" >> "${mntpoint}/home/pi/.ssh/authorized_keys"
+    fi
 }
 
 copy_sshd_keys() {
