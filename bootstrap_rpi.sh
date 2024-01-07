@@ -44,40 +44,68 @@ setup_net() {
         echo NAMESERVERS
         echo "in params file. Skipping."
     else
+        # adopt nameservers string to nm
+        local nameservers="$(echo $NAMESERVERS|sed -e 's/ /;/g');"
         {
-            echo
-            echo "interface eth0"
-            echo "static ip_address=$IP/$NETMASK"
-            echo "static routers=${GATEWAY}"
-            echo "static domain_name_servers=$NAMESERVERS"
-            echo "metric 200"
-            echo
-            echo "interface wlan0"
-            echo "static ip_address=$IP/$NETMASK"
-            echo "static routers=${GATEWAY}"
-            echo "static domain_name_servers=$NAMESERVERS"
-            echo "metric 300"
-        } >> "${mntpoint}/etc/dhcpcd.conf"
+            echo "[connection]"
+            echo "id=Wired connection 1"
+            echo "uuid=b9851567-b78b-3cc2-befb-b0c0a14ecfbc"
+            echo "type=ethernet"
+            echo "autoconnect-priority=-999"
+            echo "interface-name=eth0"
+            echo "timestamp=1704617134"
+            echo ""
+            echo "[ethernet]"
+            echo ""
+            echo "[ipv4]"
+            echo "address1=${IP}/${NETMASK}/${GATEWAY}"
+            echo "dns=$nameservers"
+            echo "method=manual"
+            echo ""
+            echo "[ipv6]"
+            echo "addr-gen-mode=default"
+            echo "method=disabled"
+            echo ""
+            echo "[proxy]"
+        } > "${mntpoint}/etc/NetworkManager/system-connections/Wired connection 1.nmconnection"
+        chmod 600 "${mntpoint}/etc/NetworkManager/system-connections/Wired connection 1.nmconnection"
     fi
 
-    if [ -z "${COUNTRY}" ] || [ -z "${SSID}" ] || [ -z "${WIFIPSK}" ]; then
+    if [ -z "${SSID}" ] || [ -z "${WIFIPSK}" ]; then
         echo -n "One (or more) variable is missing for configuring WIFI "
         echo "access. Check variables:"
-        echo COUNTRY
         echo SSID
         echo WIFIPSK
         return
     fi
     {
-        echo "ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev"
-        echo "update_config=1"
-        echo "country=${COUNTRY}"
-        echo
-        echo "network={"
-        echo "    ssid=\"${SSID}\""
-        echo "    psk=\"${WIFIPSK}\""
-        echo "}"
-    } > "${mntpoint}/etc/wpa_supplicant/wpa_supplicant.conf"
+        echo "[connection]"
+        echo "id=${SSID}"
+        echo "uuid=3a48e59d-703d-4fae-baa3-176c8b403a95"
+        echo "type=wifi"
+        echo "interface-name=wlan0"
+        echo ""
+        echo "[wifi]"
+        echo "mode=infrastructure"
+        echo "ssid=${SSID}"
+        echo ""
+        echo "[wifi-security]"
+        echo "auth-alg=open"
+        echo "key-mgmt=wpa-psk"
+        echo "psk=${WIFIPSK}"
+        echo ""
+        echo "[ipv4]"
+        echo "address1=${IP}/${NETMASK},${GATEWAY}"
+        echo "dns=$nameservers"
+        echo "method=manual"
+        echo ""
+        echo "[ipv6]"
+        echo "addr-gen-mode=default"
+        echo "method=disabled"
+        echo ""
+        echo "[proxy]"
+        } > "${mntpoint}/etc/NetworkManager/system-connections/${SSID}.nmconnection"
+       chmod 600 "${mntpoint}/etc/NetworkManager/system-connections/${SSID}.nmconnection"
 }
 
 copy_authorized_key() {
