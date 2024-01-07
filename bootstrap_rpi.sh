@@ -4,7 +4,7 @@
 # to the passed device, and do the basic boostrap - configure network, add
 # ssh key and so on.
 
-set -ex
+set -e  # x
 
 show_help() {
     echo "Usage:"
