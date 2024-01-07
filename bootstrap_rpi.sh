@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Write raspios image based on Bullseye (Debian 11) provided via commandline
+# Write raspios image based on Bookworm (Debian 12) provided via commandline
 # to the passed device, and do the basic boostrap - configure network, add
 # ssh key and so on.
 
@@ -170,6 +170,14 @@ copy_pi_files() {
     fi
 }
 
+disable_interactive_setup() {
+    # just replace ExecStart with cancel-rename, which will stop renaming 
+    # process for user pi and will enable getty.
+    local mntpoint="$1"
+    sed -ie 's~ExecStart=.*~ExecStart=/usr/bin/cancel-rename~g' \
+        "$mntpoint/lib/systemd/system/userconfig.service"
+}
+
 if [ $# -ne 2 ]; then
     show_help
     exit 1
@@ -194,6 +202,7 @@ fs_mnt=$(mktemp -d pixie.XXX)
 mount "${DEVICE}1" "${boot_mnt}"
 mount "${DEVICE}2" "${fs_mnt}"
 
+disable_interactive_setup "${fs_mnt}"
 enable_ssh_on_boot "${boot_mnt}"
 set_hostname "${fs_mnt}"
 setup_net "${fs_mnt}"
