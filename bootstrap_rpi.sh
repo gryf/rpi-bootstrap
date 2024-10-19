@@ -12,12 +12,22 @@ $0 <options> src_image [dst_image|device]
 EOF
     exit ${1:-0}
 }
+_sudo() {
+    if which sudo &>/dev/null; then
+        sudo "$@"
+    elif which doas &>/dev/null; then
+        doas "$@"
+    else
+        echo "Fatal: no sudo/doas found!"
+        exit 10
+    fi
+}
 
 write_to_device() {
     local image=$1
     local dest=$2
     _verbose && echo "Writing image to device ${dest}"
-    dd status=progress if="${image}" of="${dest}" bs=10240
+    _sudo dd status=progress if="${image}" of="${dest}" bs=10240
 }
 
 enable_ssh_on_boot() {
@@ -31,9 +41,9 @@ set_hostname() {
         echo "No hostname for RPi defined. Leaving default."
         return
     fi
-    echo "${PIHOSTNAME}" > "${mntpoint}/etc/hostname"
+    echo "${PIHOSTNAME}" > _sudo tee "${mntpoint}/etc/hostname"
     # default hostname for raspbian is raspberrypi
-    sed -ie "s/raspberrypi/${PIHOSTNAME}/" "${mntpoint}/etc/hosts"
+    _sudo sed -ie "s/raspberrypi/${PIHOSTNAME}/" "${mntpoint}/etc/hosts"
     echo "Hostname for RPi chaned to '${PIHOSTNAME}'."
 }
 
@@ -63,7 +73,7 @@ setup_net() {
             echo "[ethernet]"
             echo ""
             echo "[ipv4]"
-            echo "address1=${IP}/${NETMASK}/${GATEWAY}"
+            echo "address1=${IP}/${NETMASK},${GATEWAY}"
             echo "dns=$nameservers"
             echo "method=manual"
             echo ""
@@ -72,8 +82,8 @@ setup_net() {
             echo "method=disabled"
             echo ""
             echo "[proxy]"
-        } > "${mntpoint}/etc/NetworkManager/system-connections/Wired connection 1.nmconnection"
-        chmod 600 "${mntpoint}/etc/NetworkManager/system-connections/Wired connection 1.nmconnection"
+        } | _sudo tee "${mntpoint}/etc/NetworkManager/system-connections/Wired connection 1.nmconnection" > /dev/null
+        _sudo chmod 600 "${mntpoint}/etc/NetworkManager/system-connections/Wired connection 1.nmconnection"
     fi
 
     if [ -z "${SSID}" ] || [ -z "${WIFIPSK}" ]; then
@@ -109,30 +119,30 @@ setup_net() {
         echo "method=disabled"
         echo ""
         echo "[proxy]"
-        } > "${mntpoint}/etc/NetworkManager/system-connections/${SSID}.nmconnection"
-       chmod 600 "${mntpoint}/etc/NetworkManager/system-connections/${SSID}.nmconnection"
+        } | _sudo tee "${mntpoint}/etc/NetworkManager/system-connections/${SSID}.nmconnection" >/dev/null
+       _sudo chmod 600 "${mntpoint}/etc/NetworkManager/system-connections/${SSID}.nmconnection"
 }
 
 copy_authorized_key() {
     local mntpoint="$1"
     if [ ! -d "${mntpoint}/home/pi/.ssh" ]; then
-        mkdir "${mntpoint}/home/pi/.ssh"
-        chmod 700 "${mntpoint}/home/pi/.ssh"
-        chown 1000:1000 "${mntpoint}/home/pi/.ssh"
+        _sudo mkdir "${mntpoint}/home/pi/.ssh"
+        _sudo chmod 700 "${mntpoint}/home/pi/.ssh"
+        _sudo chown 1000:1000 "${mntpoint}/home/pi/.ssh"
     fi
 
     if [ ! -f "${mntpoint}/home/pi/.ssh/authorized_keys" ]; then
-        touch "${mntpoint}/home/pi/.ssh/authorized_keys"
-        chmod 600 "${mntpoint}/home/pi/.ssh/authorized_keys"
-        chown 1000:1000 "${mntpoint}/home/pi/.ssh/authorized_keys"
+        _sudo touch "${mntpoint}/home/pi/.ssh/authorized_keys"
+        _sudo chmod 600 "${mntpoint}/home/pi/.ssh/authorized_keys"
+        _sudo chown 1000:1000 "${mntpoint}/home/pi/.ssh/authorized_keys"
     fi
 
     if [[ -f "${SSHKEY}" ]]; then
         # if SSHKEY contain filename pointing to the ssh key, use it
-        cat "${SSHKEY}" >> "${mntpoint}/home/pi/.ssh/authorized_keys"
+        cat "${SSHKEY}" | _sudo tee -a "${mntpoint}/home/pi/.ssh/authorized_keys" >/dev/null
     else
         # or treat it as string containing the key.
-        echo "${SSHKEY}" >> "${mntpoint}/home/pi/.ssh/authorized_keys"
+        echo "${SSHKEY}" | _sudo tee -a "${mntpoint}/home/pi/.ssh/authorized_keys" >/dev/null
     fi
 }
 
@@ -143,13 +153,13 @@ copy_sshd_keys() {
         return
     fi
     for fname in sshd_keys/*; do
-        cp "${fname}" "$mntpoint/etc/ssh"
+        _sudo cp "${fname}" "$mntpoint/etc/ssh"
     done
-    chmod 600 $mntpoint/etc/ssh/*key
-    chmod 644 $mntpoint/etc/ssh/*pub
+    _sudo chmod 600 $mntpoint/etc/ssh/*key
+    _sudo chmod 644 $mntpoint/etc/ssh/*pub
 
     # don't (re)generate keys, which are already there.
-    rm "${mntpoint}/etc/systemd/system/multi-user.target.wants/"`
+    _sudo rm "${mntpoint}/etc/systemd/system/multi-user.target.wants/"`
         `"regenerate_ssh_host_keys.service"
 }
 
@@ -163,15 +173,15 @@ set_locale() {
     # } > "${mntpoint}/etc/locale.gen"
 
     # UK kbd layout can be problematic
-    sed -ie "s/gb/${KBDLAYOUT}/" "$mntpoint/etc/default/keyboard"
+    _sudo sed -ie "s/gb/${KBDLAYOUT}/" "$mntpoint/etc/default/keyboard"
     # most of the cases C.UTF-8 will be enough
-    sed -ie "s/en_GB.UTF-8/${DEFAULTLOCALE}/" "$mntpoint/etc/default/locale"
+    _sudo sed -ie "s/en_GB.UTF-8/${DEFAULTLOCALE}/" "$mntpoint/etc/default/locale"
 }
 
 clear_soft_rfkill() {
     local mntpoint="$1"
     for fname in $mntpoint/var/lib/systemd/rfkill/platform*; do
-        echo 0 > $fname
+        echo 0 | _sudo tee $fname >/dev/null
     done
 }
 
@@ -182,7 +192,7 @@ remove_pi_pass() {
     local pattern='$6$KUf.pHy0JZ2A8C.G$1ybG8vZLdxRFmSh0NqZ9v3zTEX3LQ'
     pattern+='lCuSDZLYrseM1lys364EB59Pq89g92bRSxpur3ca.gmOyKHXQndxLKwP0'
 
-    sed -ie 's/$6$KUf.pHy0JZ2A8C.G$1ybG8vZLdxRFmSh0NqZ9v3zTEX3LQ//' \
+    _sudo sed -ie 's/$6$KUf.pHy0JZ2A8C.G$1ybG8vZLdxRFmSh0NqZ9v3zTEX3LQ//' \
         "$mntpoint/etc/shadow"
 }
 
@@ -207,14 +217,14 @@ disable_interactive_setup() {
     # just replace ExecStart with cancel-rename, which will stop renaming
     # process for user pi and will enable getty.
     local mntpoint="$1"
-    sed -ie 's~ExecStart=.*~ExecStart=/usr/bin/cancel-rename~g' \
+    _sudo sed -ie 's~ExecStart=.*~ExecStart=/usr/bin/cancel-rename~g' \
         "$mntpoint/lib/systemd/system/userconfig.service"
 }
 
 disable_regenerating_sshd_keys() {
     # remove regenerate_ssh_host_keys from main in usr/lib/raspberrypi-sys-mods/firstboot
     local mntpoint="$1"
-    sed -ie 's/  regenerate_ssh_host_keys$//g' \
+    _sudo sed -ie 's/  regenerate_ssh_host_keys$//g' \
         "$mntpoint/usr/lib/raspberrypi-sys-mods/firstboot"
 }
 
