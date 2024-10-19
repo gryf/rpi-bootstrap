@@ -7,6 +7,7 @@
 set -e
 
 #defaults
+SSHD_KEYS_DIR="sshd_keys"
 CUSTOM="custom.toml"
 VERBOSE=0
 DEBUG=0
@@ -18,6 +19,7 @@ $0 <options> src_image [dst_image|device]
 Options:
 -h      this help
 -c      path to custom.toml, default: "./custom.toml"
+-s      sshd directory, which holds server ssh keys, "./sshd_keys" by default
 -v      be verbose
 EOF
     exit ${1:-0}
@@ -60,20 +62,22 @@ mount_image() {
 }
 
 copy_sshd_keys() {
+    _verbose && echo "Copying sshd keys"
     local mntpoint="$1"
-    if [ ! -d "sshd_keys" ]; then
+    local script="$1/usr/lib/raspberrypi-sys-mods/regenerate_ssh_host_keys"
+    if [ ! -d "${SSHD_KEYS_DIR}" ]; then
         echo "No sshd keys found, skipping"
         return
     fi
-    for fname in sshd_keys/*; do
+    for fname in "${SSHD_KEYS_DIR}"/*; do
         _sudo cp "${fname}" "$mntpoint/etc/ssh"
     done
     _sudo chmod 600 $mntpoint/etc/ssh/*key
     _sudo chmod 644 $mntpoint/etc/ssh/*pub
 
-     # don't (re)generate keys, which are already there.
-     _sudo rm "${mntpoint}/etc/systemd/system/multi-user.target.wants/"`
-     `"regenerate_ssh_host_keys.service"
+    # don't (re)generate keys, which are already there.
+    _sudo sed -i -e 's/^rm/#rm/' "${script}"
+    _sudo sed -i -e 's/^ssh-keygen/#ssh-keygen/' "${script}"
 }
 
 clear_soft_rfkill() {
@@ -124,6 +128,9 @@ while getopts c:s:u:hvd opt; do
     case $opt in
         c)
             CUSTOM="${OPTARG}"
+            ;;
+        s)
+            SSHD_KEYS_DIR="${OPTARG}"
             ;;
         v)
             VERBOSE=1
@@ -187,9 +194,11 @@ copy_sshd_keys "${fs_mnt}"
 clear_soft_rfkill "${fs_mnt}"
 copy_pi_files "${fs_mnt}/home/pi"
 
-umount "${boot_mnt}"
-umount "${fs_mnt}"
+_verbose && echo "Unmounting image"
+_sudo umount "${boot_mnt}"
+_sudo umount "${fs_mnt}"
 
+_verbose && echo "Removing temporary mountpoints"
 rm -fr "${boot_mnt}"
 rm -fr "${fs_mnt}"
 
