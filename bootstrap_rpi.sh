@@ -1,17 +1,30 @@
 #!/usr/bin/env bash
 
-# Write raspios image based on Bookworm (Debian 12) provided via commandline
-# to the passed device, and do the basic boostrap - configure network, add
-# ssh key and so on.
+# Create raspios image based on Bookworm (Debian 12) provided via commandline
+# to the destination image or device, do the basic configuration - configure
+# network, add ssh key and so on.
 
-set -e  # x
+set -e
+
+CUSTOM="custom.toml"
+VERBOSE=0
 
 show_help() {
     cat <<EOF
 $0 <options> src_image [dst_image|device]
+
+Options:
+-h      this help
+-c      path to custom.toml, default: "./custom.toml"
+-v      be verbose
 EOF
     exit ${1:-0}
 }
+
+_verbose() {
+    [[ "$VERBOSE" -eq 1 ]] && return 0 || return 3
+}
+
 _sudo() {
     if which sudo &>/dev/null; then
         sudo "$@"
@@ -28,23 +41,6 @@ write_to_device() {
     local dest=$2
     _verbose && echo "Writing image to device ${dest}"
     _sudo dd status=progress if="${image}" of="${dest}" bs=10240
-}
-
-enable_ssh_on_boot() {
-    local mntpoint="$1"
-    touch "${mntpoint}/ssh"
-}
-
-set_hostname() {
-    local mntpoint="$1"
-    if [ -z "${PIHOSTNAME}" ]; then
-        echo "No hostname for RPi defined. Leaving default."
-        return
-    fi
-    echo "${PIHOSTNAME}" > _sudo tee "${mntpoint}/etc/hostname"
-    # default hostname for raspbian is raspberrypi
-    _sudo sed -ie "s/raspberrypi/${PIHOSTNAME}/" "${mntpoint}/etc/hosts"
-    echo "Hostname for RPi chaned to '${PIHOSTNAME}'."
 }
 
 setup_net() {
@@ -85,65 +81,6 @@ setup_net() {
         } | _sudo tee "${mntpoint}/etc/NetworkManager/system-connections/Wired connection 1.nmconnection" > /dev/null
         _sudo chmod 600 "${mntpoint}/etc/NetworkManager/system-connections/Wired connection 1.nmconnection"
     fi
-
-    if [ -z "${SSID}" ] || [ -z "${WIFIPSK}" ]; then
-        echo -n "One (or more) variable is missing for configuring WIFI "
-        echo "access. Check variables:"
-        echo SSID
-        echo WIFIPSK
-        return
-    fi
-    {
-        echo "[connection]"
-        echo "id=${SSID}"
-        echo "uuid=3a48e59d-703d-4fae-baa3-176c8b403a95"
-        echo "type=wifi"
-        echo "interface-name=wlan0"
-        echo ""
-        echo "[wifi]"
-        echo "mode=infrastructure"
-        echo "ssid=${SSID}"
-        echo ""
-        echo "[wifi-security]"
-        echo "auth-alg=open"
-        echo "key-mgmt=wpa-psk"
-        echo "psk=${WIFIPSK}"
-        echo ""
-        echo "[ipv4]"
-        echo "address1=${IP}/${NETMASK},${GATEWAY}"
-        echo "dns=$nameservers"
-        echo "method=manual"
-        echo ""
-        echo "[ipv6]"
-        echo "addr-gen-mode=default"
-        echo "method=disabled"
-        echo ""
-        echo "[proxy]"
-        } | _sudo tee "${mntpoint}/etc/NetworkManager/system-connections/${SSID}.nmconnection" >/dev/null
-       _sudo chmod 600 "${mntpoint}/etc/NetworkManager/system-connections/${SSID}.nmconnection"
-}
-
-copy_authorized_key() {
-    local mntpoint="$1"
-    if [ ! -d "${mntpoint}/home/pi/.ssh" ]; then
-        _sudo mkdir "${mntpoint}/home/pi/.ssh"
-        _sudo chmod 700 "${mntpoint}/home/pi/.ssh"
-        _sudo chown 1000:1000 "${mntpoint}/home/pi/.ssh"
-    fi
-
-    if [ ! -f "${mntpoint}/home/pi/.ssh/authorized_keys" ]; then
-        _sudo touch "${mntpoint}/home/pi/.ssh/authorized_keys"
-        _sudo chmod 600 "${mntpoint}/home/pi/.ssh/authorized_keys"
-        _sudo chown 1000:1000 "${mntpoint}/home/pi/.ssh/authorized_keys"
-    fi
-
-    if [[ -f "${SSHKEY}" ]]; then
-        # if SSHKEY contain filename pointing to the ssh key, use it
-        cat "${SSHKEY}" | _sudo tee -a "${mntpoint}/home/pi/.ssh/authorized_keys" >/dev/null
-    else
-        # or treat it as string containing the key.
-        echo "${SSHKEY}" | _sudo tee -a "${mntpoint}/home/pi/.ssh/authorized_keys" >/dev/null
-    fi
 }
 
 copy_sshd_keys() {
@@ -165,15 +102,6 @@ copy_sshd_keys() {
 
 set_locale() {
     local mntpoint="$1"
-    # If there is a need, specific locales can be generated (locale-gen will
-    # be invoked on system update)
-    # {
-    #     echo "pl_PL.UTF-8 UTF-8"
-    #     echo "en_US.UTF-8 UTF-8"
-    # } > "${mntpoint}/etc/locale.gen"
-
-    # UK kbd layout can be problematic
-    _sudo sed -ie "s/gb/${KBDLAYOUT}/" "$mntpoint/etc/default/keyboard"
     # most of the cases C.UTF-8 will be enough
     _sudo sed -ie "s/en_GB.UTF-8/${DEFAULTLOCALE}/" "$mntpoint/etc/default/locale"
 }
@@ -184,18 +112,6 @@ clear_soft_rfkill() {
         echo 0 | _sudo tee $fname >/dev/null
     done
 }
-
-remove_pi_pass() {
-    local mntpoint="$1"
-
-    # default hash for pi password on official raspbian image
-    local pattern='$6$KUf.pHy0JZ2A8C.G$1ybG8vZLdxRFmSh0NqZ9v3zTEX3LQ'
-    pattern+='lCuSDZLYrseM1lys364EB59Pq89g92bRSxpur3ca.gmOyKHXQndxLKwP0'
-
-    _sudo sed -ie 's/$6$KUf.pHy0JZ2A8C.G$1ybG8vZLdxRFmSh0NqZ9v3zTEX3LQ//' \
-        "$mntpoint/etc/shadow"
-}
-
 
 copy_pi_files() {
     local dst="${1}"
@@ -210,6 +126,16 @@ copy_pi_files() {
 
     if [ "$reset" -eq 1 ]; then
         shopt -u dotglob
+    fi
+}
+
+copy_customization() {
+    _verbose && echo "Copying ${CUSTOM} as custom.toml on boot partition"
+    local dst="$1"
+    if [[ -e "${CUSTOM}" ]]; then
+        _sudo cp "${CUSTOM}" "$dst/custom.toml"
+    else
+        echo "'${CUSTOM}' file not found"
     fi
 }
 
@@ -228,13 +154,29 @@ disable_regenerating_sshd_keys() {
         "$mntpoint/usr/lib/raspberrypi-sys-mods/firstboot"
 }
 
-if [ $# -ne 2 ]; then
-    show_help
-    exit 1
-fi
+while getopts c:s:u:hvd opt; do
+    case $opt in
+        c)
+            CUSTOM="${OPTARG}"
+            ;;
+        v)
+            VERBOSE=1
+            ;;
+        h)
+            show_help
+            ;;
+        *)
+            show_help 1
+            ;;
+    esac
+done
 
-SRC=$2
-DST=$1
+SRC="${@:$OPTIND:1}"
+DST="${@:$OPTIND+1:1}"
+
+if [[ -z "${SRC}" || -z "${DST}" ]]; then
+    show_help 1
+fi
 
 if [ ! -f params ]; then
     echo "File 'params' doesn't exists. Expecting to have this file "
@@ -252,6 +194,8 @@ fs_mnt=$(mktemp -d pixie.XXX)
 mount "${DST}1" "${boot_mnt}"
 mount "${DST}2" "${fs_mnt}"
 
+# get init_config and apply customization
+copy_customization "${boot_mnt}"
 disable_interactive_setup "${fs_mnt}"
 if [[ -f sshd_keys ]]; then
     disable_regenerating_sshd_keys "${fs_mnt}"
