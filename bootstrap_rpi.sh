@@ -7,12 +7,17 @@
 set -e  # x
 
 show_help() {
-    echo "Usage:"
-    echo "$0" device-to-write os-image-filename
+    cat <<EOF
+$0 <options> src_image [dst_image|device]
+EOF
+    exit ${1:-0}
 }
 
 write_to_device() {
-    dd if="${IMAGE}" of="${DEVICE}" bs=10240
+    local image=$1
+    local dest=$2
+    _verbose && echo "Writing image to device ${dest}"
+    dd status=progress if="${image}" of="${dest}" bs=10240
 }
 
 enable_ssh_on_boot() {
@@ -218,8 +223,8 @@ if [ $# -ne 2 ]; then
     exit 1
 fi
 
-DEVICE=$1
-IMAGE=$2
+SRC=$2
+DST=$1
 
 if [ ! -f params ]; then
     echo "File 'params' doesn't exists. Expecting to have this file "
@@ -229,13 +234,13 @@ fi
 
 source ./params
 
-write_to_device
+write_to_device "$SRC" "$DST"
 
 boot_mnt=$(mktemp -d pixie.XXX)
 fs_mnt=$(mktemp -d pixie.XXX)
 
-mount "${DEVICE}1" "${boot_mnt}"
-mount "${DEVICE}2" "${fs_mnt}"
+mount "${DST}1" "${boot_mnt}"
+mount "${DST}2" "${fs_mnt}"
 
 disable_interactive_setup "${fs_mnt}"
 if [[ -f sshd_keys ]]; then
