@@ -45,6 +45,20 @@ write_to_device() {
     _sudo dd status=progress if="${image}" of="${dest}" bs=10240
 }
 
+mount_image() {
+    local mountpoint=$1
+    local image=$2
+    local partition=$3
+
+    startblock=$(fdisk -l -o device,start "${image}" | \
+        grep ^"$partition" | cut -d ' ' -f 2- | sed -e 's/^\ *//')
+    fssize=$(fdisk -l -o device,sectors "${image}" | \
+        grep ^"$partition"| cut -d ' ' -f 2- | sed -e 's/^\ *//')
+    offset=$((startblock * 512))
+    sizelimit=$((fssize * 512))
+    _sudo mount -o offset=$offset,sizelimit=$sizelimit "$image" "$mountpoint"
+}
+
 setup_net() {
     local mntpoint="$1"
     if [ -z "${IP}" ] || [ -z "${GATEWAY}" ] || [ -z "${NETMASK}" ] || \
@@ -186,7 +200,6 @@ DST="${@:$OPTIND+1:1}"
 if [[ -z "${SRC}" || -z "${DST}" ]]; then
     show_help 1
 fi
-
 if [ ! -f params ]; then
     echo "File 'params' doesn't exists. Expecting to have this file "
     echo "filled with right information."
@@ -195,13 +208,33 @@ fi
 
 source ./params
 
-write_to_device "$SRC" "$DST"
+# Prepare mountpoints. both are the same with a pattern rpi_X.YYY, where X is
+# partition number and Y is random character
+_verbose && echo "Creating temporary mountpoint directory"
+boot_mnt=$(mktemp -d rpi_1.XXX)
+fs_mnt=${boot_mnt/1/2}
+mkdir "${fs_mnt}"
 
-boot_mnt=$(mktemp -d pixie.XXX)
-fs_mnt=$(mktemp -d pixie.XXX)
+# copy image. if destination is device, make a phony file
+if [[ "${DST}" == /dev/* ]]; then
+    _verbose && echo "Copy image to temporary place"
+    tmp_imgname=$(mktemp)
+else
+    _verbose && echo "Copy image to destination file"
+    tmp_imgname="${DST}"
+fi
 
-mount "${DST}1" "${boot_mnt}"
-mount "${DST}2" "${fs_mnt}"
+cp "${SRC}" "${tmp_imgname}"
+
+# identify and mount image
+partitions=$(LANG=C fdisk -l -o device "${tmp_imgname}" | \
+    sed -n '/^Device$/,$p' | tail -n +2)
+_verbose && echo "Mounting image partitions"
+for part in $partitions; do
+    part_no="${part/$tmp_imgname}"
+    mnt_dst="${boot_mnt/1/$part_no}"
+    mount_image "${mnt_dst}" "${tmp_imgname}" "${part}"
+done
 
 # get init_config and apply customization
 copy_customization "${boot_mnt}"
@@ -224,3 +257,9 @@ umount "${fs_mnt}"
 
 rm -fr "${boot_mnt}"
 rm -fr "${fs_mnt}"
+
+if [[ "${DST}" == /dev/* ]]; then
+    write_to_device "${tmp_imgname}" "${DST}"
+    rm "${tmp_imgname}"
+fi
+_verbose && echo "All done"
