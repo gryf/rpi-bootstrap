@@ -6,8 +6,10 @@
 
 set -e
 
+#defaults
 CUSTOM="custom.toml"
 VERBOSE=0
+DEBUG=0
 
 show_help() {
     cat <<EOF
@@ -162,6 +164,9 @@ while getopts c:s:u:hvd opt; do
         v)
             VERBOSE=1
             ;;
+        d)
+            DEBUG=1
+            ;;
         h)
             show_help
             ;;
@@ -170,6 +175,10 @@ while getopts c:s:u:hvd opt; do
             ;;
     esac
 done
+
+if [[ "$DEBUG" -eq 1 ]]; then
+    set -x
+fi
 
 SRC="${@:$OPTIND:1}"
 DST="${@:$OPTIND+1:1}"
