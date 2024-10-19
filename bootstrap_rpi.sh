@@ -8,6 +8,7 @@ set -e
 
 #defaults
 SSHD_KEYS_DIR="sshd_keys"
+USER_FILES="pi"
 CUSTOM="custom.toml"
 VERBOSE=0
 DEBUG=0
@@ -20,6 +21,8 @@ Options:
 -h      this help
 -c      path to custom.toml, default: "./custom.toml"
 -s      sshd directory, which holds server ssh keys, "./sshd_keys" by default
+-u      user files directory, which contents be copy to default user,
+        "./pi" by default
 -v      be verbose
 EOF
     exit ${1:-0}
@@ -81,26 +84,23 @@ copy_sshd_keys() {
 }
 
 clear_soft_rfkill() {
+    _verbose && echo "Clear soft rfkill - enabling BT and Wlan on boot"
     local mntpoint="$1"
     for fname in $mntpoint/var/lib/systemd/rfkill/platform*; do
         echo 0 | _sudo tee $fname >/dev/null
     done
 }
 
-copy_pi_files() {
+copy_user_files() {
+    _verbose && echo "Copying user files"
     local dst="${1}"
-    local src="pi"
-
-    if ! shopt dotglob; then
-        reset=1
+    local src="${USER_FILES}"
+    if [[ ! -e "${src}" ]]; then
+        echo "No user files to copy"
+        return
     fi
 
-    shopt -s dotglob
-    cp -a ${src}/* "${dst}/"
-
-    if [ "$reset" -eq 1 ]; then
-        shopt -u dotglob
-    fi
+    cp -r ${src}/. "${dst}/"
 }
 
 copy_customization() {
@@ -131,6 +131,9 @@ while getopts c:s:u:hvd opt; do
             ;;
         s)
             SSHD_KEYS_DIR="${OPTARG}"
+            ;;
+        u)
+            USER_FILES="${OPTARG}"
             ;;
         v)
             VERBOSE=1
@@ -192,7 +195,7 @@ copy_customization "${boot_mnt}"
 get_and_copy_init_config "${fs_mnt}"
 copy_sshd_keys "${fs_mnt}"
 clear_soft_rfkill "${fs_mnt}"
-copy_pi_files "${fs_mnt}/home/pi"
+copy_user_files "${fs_mnt}/home/pi"
 
 _verbose && echo "Unmounting image"
 _sudo umount "${boot_mnt}"
