@@ -25,7 +25,7 @@ Options:
         "./pi" by default
 -v      be verbose
 EOF
-    exit ${1:-0}
+    exit "${1:-0}"
 }
 
 _verbose() {
@@ -75,8 +75,8 @@ copy_sshd_keys() {
     for fname in "${SSHD_KEYS_DIR}"/*; do
         _sudo cp "${fname}" "$mntpoint/etc/ssh"
     done
-    _sudo chmod 600 $mntpoint/etc/ssh/*key
-    _sudo chmod 644 $mntpoint/etc/ssh/*pub
+    _sudo chmod 600 "$mntpoint"/etc/ssh/*key
+    _sudo chmod 644 "$mntpoint"/etc/ssh/*pub
 
     # don't (re)generate keys, which are already there.
     _sudo sed -i -e 's/^rm/#rm/' "${script}"
@@ -86,8 +86,8 @@ copy_sshd_keys() {
 clear_soft_rfkill() {
     _verbose && echo "Clear soft rfkill - enabling BT and Wlan on boot"
     local mntpoint="$1"
-    for fname in $mntpoint/var/lib/systemd/rfkill/platform*; do
-        echo 0 | _sudo tee $fname >/dev/null
+    for fname in "$mntpoint"/var/lib/systemd/rfkill/platform*; do
+        echo 0 | _sudo tee "$fname" >/dev/null
     done
 }
 
@@ -100,7 +100,7 @@ copy_user_files() {
         return
     fi
 
-    cp -r ${src}/. "${dst}/"
+    cp -r "${src}/." "${dst}/"
 }
 
 copy_customization() {
@@ -154,7 +154,9 @@ if [[ "$DEBUG" -eq 1 ]]; then
     set -x
 fi
 
+# shellcheck disable=SC2124
 SRC="${@:$OPTIND:1}"
+# shellcheck disable=SC2124
 DST="${@:$OPTIND+1:1}"
 
 if [[ -z "${SRC}" || -z "${DST}" ]]; then
