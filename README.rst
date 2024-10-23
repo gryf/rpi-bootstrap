@@ -3,7 +3,7 @@ Raspberry Pi OS bootstrap
 =========================
 
 This repository contains simple script, which will prepare modified image of
-`Raspbery Pi OS`_ and write it to microSD card/usb drive (if the destination
+`Raspberry Pi OS`_ and write it to microSD card/usb drive (if the destination
 is a device), so that Raspberry Pi can be first-boot in completely headless
 manners.
 
@@ -138,5 +138,6 @@ Now, you can run whatever post-install things you want to perform either
 manually or script - that's up to you.
 
 .. _Raspberry Pi OS: https://www.raspberrypi.com/software/operating-systems
+
 .. _found on GitHub: https://github.com/RPi-Distro/raspberrypi-sys-mods
-.. _this repo hold modified: https://github.com/gryf/raspberrypi-sys-mods
+.. _this repo holds modified: https://github.com/gryf/raspberrypi-sys-mods
